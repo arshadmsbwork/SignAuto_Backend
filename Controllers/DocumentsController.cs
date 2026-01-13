@@ -45,44 +45,43 @@ public class DocumentsController : ControllerBase
     public async Task<IActionResult> GetPdf(string id)
     {
         Console.WriteLine($"PDF request received for document ID: {id}");
-        
-        var pdfBytes = await _documentService.GetPdfBytesAsync(id);
-        if (pdfBytes == null)
+
+        var document = await _documentService.GetDocumentByIdAsync(id);
+        if (document == null)
         {
-            Console.WriteLine($"PDF not found for document ID: {id}");
+            Console.WriteLine($"Document not found in DB: {id}");
+            return NotFound(new { message = $"Document {id} not found" });
+        }
+
+        // Normalize path for Linux/Render and Windows
+        var relativePath = document.FilePath.Replace("\\", "/"); // convert Windows slashes
+        var fullPath = Path.Combine(AppContext.BaseDirectory, relativePath);
+
+        Console.WriteLine($"Looking for PDF at: {fullPath}");
+
+        if (!System.IO.File.Exists(fullPath))
+        {
+            Console.WriteLine($"PDF not found for document {id}");
             return NotFound(new { message = $"PDF not found for document {id}" });
         }
 
-        var document = await _documentService.GetDocumentByIdAsync(id);
-        var fileName = document?.Name?.Replace(" ", "_") ?? $"document_{id}.pdf";
-        
+        var pdfBytes = await System.IO.File.ReadAllBytesAsync(fullPath);
+        var fileName = document.Name?.Replace(" ", "_") ?? $"document_{id}.pdf";
+
         Console.WriteLine($"Returning PDF: {fileName}, Size: {pdfBytes.Length} bytes");
-        
-        // Set headers for PDF.js compatibility
+
+        // Headers for PDF.js / inline display
         Response.Headers.Append("Content-Type", "application/pdf");
         Response.Headers.Append("Content-Disposition", $"inline; filename=\"{fileName}\"");
         Response.Headers.Append("Accept-Ranges", "bytes");
         Response.Headers.Append("Content-Length", pdfBytes.Length.ToString());
-        
-        // Return file - PDF.js needs proper binary response
+
         return new FileContentResult(pdfBytes, "application/pdf");
     }
-/***
-    [HttpPost("{id}/sign")]
-    public async Task<IActionResult> SignDocument(string id)
-    {
-        var success = await _documentService.SignDocumentAsync(id);
-        if (!success)
-            return BadRequest(new { message = "Failed to sign document" });
 
-        var document = await _documentService.GetDocumentByIdAsync(id);
-        return Ok(document);
-    }
-    ***/
     [HttpPost("{id}/sign")]
     public async Task<IActionResult> SignDocument(string id)
     {
-        // Let exceptions bubble up so ASP.NET shows the real error
         Console.WriteLine("SIGN ENDPOINT HIT");
         await _documentService.SignDocumentAsync(id);
 
@@ -145,11 +144,9 @@ public class DocumentsController : ControllerBase
 
         return Ok(new { results = response });
     }
-    
 
     public class BulkSignRequest
     {
         public List<string> DocumentIds { get; set; } = new List<string>();
     }
-
 }
