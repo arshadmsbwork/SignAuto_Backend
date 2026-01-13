@@ -42,46 +42,62 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpGet("{id}/pdf")]
-    public async Task<IActionResult> GetPdf(string id)
+public async Task<IActionResult> GetPdf(string id)
+{
+    Console.WriteLine($"PDF request received for document ID: {id}");
+
+    var document = await _documentService.GetDocumentByIdAsync(id);
+    if (document == null)
     {
-        Console.WriteLine($"PDF request received for document ID: {id}");
-
-        var document = await _documentService.GetDocumentByIdAsync(id);
-        if (document == null)
-        {
-            Console.WriteLine($"Document not found in DB: {id}");
-            return NotFound(new { message = $"Document {id} not found" });
-        }
-
-        // Normalize path for Linux/Render and Windows
-        var relativePath = document.FilePath.Replace("\\", "/"); // convert Windows slashes
-        var fullPath = Path.Combine(AppContext.BaseDirectory, relativePath);
-
-        Console.WriteLine($"Looking for PDF at: {fullPath}");
-
-        if (!System.IO.File.Exists(fullPath))
-        {
-            Console.WriteLine($"PDF not found for document {id}");
-            return NotFound(new { message = $"PDF not found for document {id}" });
-        }
-
-        var pdfBytes = await System.IO.File.ReadAllBytesAsync(fullPath);
-        var fileName = document.Name?.Replace(" ", "_") ?? $"document_{id}.pdf";
-
-        Console.WriteLine($"Returning PDF: {fileName}, Size: {pdfBytes.Length} bytes");
-
-        // Headers for PDF.js / inline display
-        Response.Headers.Append("Content-Type", "application/pdf");
-        Response.Headers.Append("Content-Disposition", $"inline; filename=\"{fileName}\"");
-        Response.Headers.Append("Accept-Ranges", "bytes");
-        Response.Headers.Append("Content-Length", pdfBytes.Length.ToString());
-
-        return new FileContentResult(pdfBytes, "application/pdf");
+        Console.WriteLine($"Document not found in DB: {id}");
+        return NotFound(new { message = $"Document {id} not found" });
     }
 
+    // Normalize the path for Linux/Render
+    // Convert Windows backslashes to forward slashes
+    var relativePath = document.FilePath.Replace("\\", "/"); 
+
+    // Prepend app root (container root)
+    var fullPath = Path.Combine(AppContext.BaseDirectory, relativePath);
+
+    Console.WriteLine($"Looking for PDF at: {fullPath}");
+
+    if (!System.IO.File.Exists(fullPath))
+    {
+        Console.WriteLine($"PDF not found for document {id}");
+        return NotFound(new { message = $"PDF not found for document {id}" });
+    }
+
+    var pdfBytes = await System.IO.File.ReadAllBytesAsync(fullPath);
+    var fileName = document.Name?.Replace(" ", "_") ?? $"document_{id}.pdf";
+
+    Console.WriteLine($"Returning PDF: {fileName}, Size: {pdfBytes.Length} bytes");
+
+    // PDF.js headers
+    Response.Headers.Append("Content-Type", "application/pdf");
+    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{fileName}\"");
+    Response.Headers.Append("Accept-Ranges", "bytes");
+    Response.Headers.Append("Content-Length", pdfBytes.Length.ToString());
+
+    return new FileContentResult(pdfBytes, "application/pdf");
+}
+
+/***
     [HttpPost("{id}/sign")]
     public async Task<IActionResult> SignDocument(string id)
     {
+        var success = await _documentService.SignDocumentAsync(id);
+        if (!success)
+            return BadRequest(new { message = "Failed to sign document" });
+
+        var document = await _documentService.GetDocumentByIdAsync(id);
+        return Ok(document);
+    }
+    ***/
+    [HttpPost("{id}/sign")]
+    public async Task<IActionResult> SignDocument(string id)
+    {
+        // Let exceptions bubble up so ASP.NET shows the real error
         Console.WriteLine("SIGN ENDPOINT HIT");
         await _documentService.SignDocumentAsync(id);
 
@@ -144,9 +160,11 @@ public class DocumentsController : ControllerBase
 
         return Ok(new { results = response });
     }
+    
 
     public class BulkSignRequest
     {
         public List<string> DocumentIds { get; set; } = new List<string>();
     }
+
 }
