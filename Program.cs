@@ -23,6 +23,8 @@ builder.Services.AddCors(options =>
 
 
 var app = builder.Build();
+app.UseSwagger();
+app.UseSwaggerUI();
 
 // Configure pipeline
 if (app.Environment.IsDevelopment())
@@ -37,5 +39,5 @@ app.UseRouting();
 app.UseCors("AllowFrontend");
 app.UseAuthorization();
 app.MapControllers();
-
+app.MapGet("/", () => "SignAuto Backend is LIVE 🚀");
 app.Run();
